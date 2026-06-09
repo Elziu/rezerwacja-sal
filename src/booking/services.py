@@ -39,4 +39,37 @@ class ReservationService:
             reservations = reservations.exclude(id=exclude_reservation_id)
 
         return reservations.exists()
+    
+    @staticmethod
+    def cancel_reservation(reservation):
+        reservation.status = Reservation.Status.CANCELLED
+        reservation.save(update_fields=["status", "updated_at"])
+        return reservation
+
+    @staticmethod
+    def modify_reservation(reservation, room, date, start_time, end_time, user):
+        if start_time >= end_time:
+            raise ValidationError("Start time must be before end time.")
+
+        if room.status != Room.Status.AVAILABLE:
+            raise ValidationError("Room is unavailable.")
+
+        if ReservationService.has_conflict(
+            room=room,
+            date=date,
+            start_time=start_time,
+            end_time=end_time,
+            exclude_reservation_id=reservation.id,
+        ):
+            raise ValidationError("Room is already reserved for this time.")
+
+        reservation.room = room
+        reservation.date = date
+        reservation.start_time = start_time
+        reservation.end_time = end_time
+        reservation.save()
+
+        return reservation
+
+
 
