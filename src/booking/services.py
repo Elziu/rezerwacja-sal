@@ -27,4 +27,16 @@ class ReservationService:
 
     @staticmethod
     def has_conflict(room, date, start_time, end_time, exclude_reservation_id=None):
-        return False
+        reservations = Reservation.objects.filter(
+            room=room,
+            date=date,
+            status=Reservation.Status.ACTIVE,
+            start_time__lt=end_time,
+            end_time__gt=start_time,
+        )
+
+        if exclude_reservation_id is not None:
+            reservations = reservations.exclude(id=exclude_reservation_id)
+
+        return reservations.exists()
+
