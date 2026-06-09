@@ -71,5 +71,40 @@ class ReservationService:
 
         return reservation
 
+    @staticmethod
+    def get_available_rooms(date=None, start_time=None, end_time=None):
+        rooms = Room.objects.filter(status=Room.Status.AVAILABLE)
+
+        if not date or not start_time or not end_time:
+            return rooms
+
+        unavailable_room_ids = Reservation.objects.filter(
+            date=date,
+            status=Reservation.Status.ACTIVE,
+            start_time__lt=end_time,
+            end_time__gt=start_time,
+        ).values_list("room_id", flat=True)
+
+        return rooms.exclude(id__in=unavailable_room_ids)
+
+    @staticmethod
+    def get_user_reservations(user):
+        return Reservation.objects.filter(
+            created_by=user,
+            status=Reservation.Status.ACTIVE,
+        ).order_by("date", "start_time")
+
+    @staticmethod
+    def get_time_slots():
+        slots = []
+        current = datetime.combine(datetime.today(), time(8, 0))
+        end = datetime.combine(datetime.today(), time(16, 0))
+
+        while current <= end:
+            slots.append(current.time())
+            current += timedelta(minutes=15)
+
+        return slots
+
 
 
