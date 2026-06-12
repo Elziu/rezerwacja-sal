@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Rezerwacja sal</title>
+</head>
+<body>
+    <header>
+        <h1>Rezerwacja sal</h1>
+        <p>Zalogowano jako: {{ request.user.username }}</p>
+        <a href="{% url 'logout' %}">Wyloguj</a>
+    </header>
+
+    {% if messages %}
+        <section>
+            {% for message in messages %}
+                <p>{{ message }}</p>
+            {% endfor %}
+        </section>
+    {% endif %}
+
+    <main>
+        <section>
+            <h2>Nowa rezerwacja</h2>
+
+            <form id="reservation-form" method="post" action="{% url 'create_reservation' %}">
+                {% csrf_token %}
+
+                <div>
+                    <label for="date">Data</label>
+                    <input id="date" type="date" name="date" required>
+                </div>
+
+                <div>
+                    <label for="start_time">Od</label>
+                    <select id="start_time" name="start_time" required>
+                        {% for slot in time_slots %}
+                            <option value="{{ slot|time:'H:i' }}">{{ slot|time:'H:i' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="end_time">Do</label>
+                    <select id="end_time" name="end_time" required>
+                        {% for slot in time_slots %}
+                            <option value="{{ slot|time:'H:i' }}">{{ slot|time:'H:i' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label for="room">Sala</label>
+                    <select id="room" name="room" required>
+                        {% for room in rooms %}
+                            <option value="{{ room.id }}">{{ room.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <p id="reservation-error" style="color: red;"></p>
+
+                <button type="submit">Zarezerwuj</button>
+            </form>
+        </section>
+
+        <section>
+            <h2>Moje rezerwacje</h2>
+
+            {% if user_reservations %}
+                <ul>
+                    {% for reservation in user_reservations %}
+                        <li>
+                            {{ reservation.room.name }}
+                            —
+                            {{ reservation.date }}
+                            {{ reservation.start_time|time:'H:i' }}
+                            -
+                            {{ reservation.end_time|time:'H:i' }}
+
+                            <form method="post" action="{% url 'cancel_reservation' reservation.id %}" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit">Anuluj</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>Nie masz aktywnych rezerwacji.</p>
+            {% endif %}
+        </section>
+    </main>
+
+    {{ all_reservations|json_script:"reservations-data" }}
+
+    <script src="/static/js/reservation.js"></script>
+</body>
+</html>
