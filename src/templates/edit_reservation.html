@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <h2 class="text-2xl font-semibold mb-4">Edytuj rezerwację</h2>
+    
+    <div class="alert alert-info mb-6">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        <div>
+            <h3 class="font-bold">Aktualna rezerwacja:</h3>
+            <p>{{ reservation.room.name }} | {{ reservation.date }} | {{ reservation.time_from }} – {{ reservation.time_to }}</p>
+        </div>
+    </div>
+
+    <form method="POST" action="/reservations/{{ reservation.id }}/edit/" id="reservation-form" class="mb-8 p-6 bg-base-200 rounded-lg">
+        {% csrf_token %}
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            
+            <!-- Sala (ukryte pole - wybierane kliknięciem na kartę) -->
+            <input type="hidden" name="room" id="selected-room-id" value="{{ reservation.room.id }}" required>
+
+            <!-- Data -->
+            <div class="form-control">
+                <label class="label"><span class="label-text">Data</span></label>
+                <input 
+                    type="text"
+                    id="reservation-datepicker"
+                    name="date"
+                    value="{{ reservation.date|date:'Y-m-d' }}"
+                    class="input input-bordered bg-base-100 h-12"
+                    autocomplete="off"
+                    placeholder="Wybierz datę"
+                    required
+                >
+            </div>
+
+            <!-- Godzina od -->
+            <div class="form-control">
+                <label class="label"><span class="label-text">Godzina od</span></label>
+                <select name="time_from" id="time-from" class="select select-bordered w-full h-12" required>
+                    <option disabled>Wybierz</option>
+                    {% for t in hours %}
+                        <option value="{{ t }}" {% if t == reservation.time_from|time:'H:i' %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Godzina do -->
+            <div class="form-control">
+                <label class="label"><span class="label-text">Godzina do</span></label>
+                <select name="time_to" id="time-to" class="select select-bordered w-full h-12" required>
+                    <option disabled>Wybierz</option>
+                    {% for t in hours %}
+                        <option value="{{ t }}" {% if t == reservation.time_to|time:'H:i' %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-control flex flex-row gap-2">
+                <button type="submit" class="btn btn-primary flex-1 h-12">Zapisz zmiany</button>
+                <a href="/" class="btn btn-ghost flex-1 h-12">Anuluj</a>
+            </div>
+
+        </div>
+        
+        <div id="room-selection-hint" class="mt-4 text-center opacity-60">
+            Wybrano: {{ reservation.room.name }}
+        </div>
+    </form>
+
+    <h2 class="text-2xl font-semibold mb-4 mt-8">Wybierz salę (opcjonalnie)</h2>
+
+    <div id="rooms-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+    {% for item in rooms_with_availability %}
+        <div class="room-card card bg-base-100 shadow-xl cursor-pointer hover:shadow-2xl transition-all {% if item.room.id == reservation.room.id %}ring-4 ring-primary{% endif %}" 
+             data-room-id="{{ item.room.id }}"
+             data-room-name="{{ item.room.name }}">
+            
+            <div class="card-body">
+                <h3 class="card-title text-xl">{{ item.room.name }}</h3>
+                <div class="room-status-badge">
+                    <div class="badge badge-neutral gap-2">Sprawdź dostępność</div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+
+    </div>
+
+    <div id="no-rooms-message" class="text-center opacity-60 mt-8" style="display: none;">
+        Brak dostępnych sal w wybranym terminie
+    </div>
+</div>
+
+<!-- ============================================ -->
+<!--                PIKADAY INIT                   -->
+<!-- ============================================ -->
+
+<script>
+// Dane rezerwacji dla każdej sali (wykluczając edytowaną rezerwację)
+const roomReservations = {
+    {% for item in rooms_with_availability %}
+    {{ item.room.id }}: [
+        {% for r in item.reservations %}
+        {
+            date: "{{ r.date|date:'Y-m-d' }}",
+            time_from: "{{ r.time_from|time:'H:i' }}",
+            time_to: "{{ r.time_to|time:'H:i' }}"
+        },
+        {% endfor %}
+    ],
+    {% endfor %}
+};
+
+document.addEventListener("DOMContentLoaded", function () {
+    // Inicjalizacja menedżera rezerwacji z wykluczeniem edytowanej rezerwacji
+    const manager = new ReservationManager(roomReservations, {
+        dateInputId: 'reservation-datepicker',
+        timeFromId: 'time-from',
+        timeToId: 'time-to',
+        roomInputId: 'selected-room-id',
+        hintId: 'room-selection-hint',
+        noRoomsMessageId: 'no-rooms-message',
+        formId: 'reservation-form',
+        excludeReservationId: {{ reservation.id }}
+    });
+    
+    // Inicjalizuj walidację dostępności po załadowaniu
+    manager.filterAvailableRooms();
+    manager.updateTimeToOptions();
+});
+</script>
+
+{% endblock %}

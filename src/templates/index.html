@@ -1,98 +1,164 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <title>Rezerwacja sal</title>
-</head>
-<body>
-    <header>
-        <h1>Rezerwacja sal</h1>
-        <p>Zalogowano jako: {{ request.user.username }}</p>
-        <a href="{% url 'logout' %}">Wyloguj</a>
-    </header>
+{% extends "base.html" %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Twoje rezerwacje</h2>
 
-    {% if messages %}
-        <section>
-            {% for message in messages %}
-                <p>{{ message }}</p>
-            {% endfor %}
-        </section>
-    {% endif %}
+{% if reservations %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
 
-    <main>
-        <section>
-            <h2>Nowa rezerwacja</h2>
+    {% for r in reservations %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
 
-            <form id="reservation-form" method="post" action="{% url 'create_reservation' %}">
-                {% csrf_token %}
+            <h3 class="card-title text-xl">{{ r.room.name }}</h3>
 
-                <div>
-                    <label for="date">Data</label>
-                    <input id="date" type="date" name="date" required>
-                </div>
+            <p class="opacity-80">
+                {{ r.date }}<br>
+                {{ r.time_from|time:"H:i" }} – {{ r.time_to|time:"H:i" }}
+            </p>
 
-                <div>
-                    <label for="start_time">Od</label>
-                    <select id="start_time" name="start_time" required>
-                        {% for slot in time_slots %}
-                            <option value="{{ slot|time:'H:i' }}">{{ slot|time:'H:i' }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label for="end_time">Do</label>
-                    <select id="end_time" name="end_time" required>
-                        {% for slot in time_slots %}
-                            <option value="{{ slot|time:'H:i' }}">{{ slot|time:'H:i' }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div>
-                    <label for="room">Sala</label>
-                    <select id="room" name="room" required>
-                        {% for room in rooms %}
-                            <option value="{{ room.id }}">{{ room.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <p id="reservation-error" style="color: red;"></p>
-
-                <button type="submit">Zarezerwuj</button>
-            </form>
-        </section>
-
-        <section>
-            <h2>Moje rezerwacje</h2>
-
-            {% if user_reservations %}
-                <ul>
-                    {% for reservation in user_reservations %}
-                        <li>
-                            {{ reservation.room.name }}
-                            —
-                            {{ reservation.date }}
-                            {{ reservation.start_time|time:'H:i' }}
-                            -
-                            {{ reservation.end_time|time:'H:i' }}
-
-                            <form method="post" action="{% url 'cancel_reservation' reservation.id %}" style="display:inline;">
-                                {% csrf_token %}
-                                <button type="submit">Anuluj</button>
-                            </form>
-                        </li>
-                    {% endfor %}
-                </ul>
+            {% if r.status == "ACTIVE" %}
+                <span class="badge badge-success">Aktywna</span>
             {% else %}
-                <p>Nie masz aktywnych rezerwacji.</p>
+                <span class="badge badge-error">Anulowana</span>
             {% endif %}
-        </section>
-    </main>
 
-    {{ all_reservations|json_script:"reservations-data" }}
+            <div class="card-actions justify-end mt-4">
+                {% if r.status == "ACTIVE" %}
+                <a href="/reservations/{{ r.id }}/edit/" class="btn btn-sm btn-primary">
+                    Edytuj
+                </a>
+                <a href="/reservations/{{ r.id }}/cancel/" class="btn btn-sm btn-error">
+                    Anuluj
+                </a>
+                {% endif %}
+            </div>
 
-    <script src="/static/js/reservation.js"></script>
-</body>
-</html>
+        </div>
+    </div>
+    {% endfor %}
+
+</div>
+{% else %}
+<div class="text-center opacity-60 mb-12">
+    Brak rezerwacji.
+</div>
+{% endif %}
+
+
+<h2 class="text-2xl font-semibold mb-4">Utwórz rezerwację</h2>
+
+<form method="POST" action="/reservations/new/" id="reservation-form" class="mb-8 p-6 bg-base-200 rounded-lg">
+    {% csrf_token %}
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        
+        <!-- Sala (ukryte pole - wybierane kliknięciem na kartę) -->
+        <input type="hidden" name="room" id="selected-room-id" required>
+
+        <!-- Data -->
+        <div class="form-control">
+            <label class="label"><span class="label-text">Data</span></label>
+            <input 
+                type="text"
+                id="reservation-datepicker"
+                name="date"
+                class="input input-bordered bg-base-100 h-12"
+                autocomplete="off"
+                placeholder="Wybierz datę"
+                required
+            >
+        </div>
+
+        <!-- Godzina od -->
+        <div class="form-control">
+            <label class="label"><span class="label-text">Godzina od</span></label>
+            <select name="time_from" id="time-from" class="select select-bordered w-full h-12" required>
+                <option disabled selected>Wybierz</option>
+                {% for t in hours %}
+                    <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Godzina do -->
+        <div class="form-control">
+            <label class="label"><span class="label-text">Godzina do</span></label>
+            <select name="time_to" id="time-to" class="select select-bordered w-full h-12" required>
+                <option disabled selected>Wybierz</option>
+                {% for t in hours %}
+                    <option value="{{ t }}">{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-control">
+            <button class="btn btn-primary w-full md:w-auto h-12">Zarezerwuj</button>
+        </div>
+
+    </div>
+    
+    <div id="room-selection-hint" class="mt-4 text-center opacity-60">
+        Wybierz datę i godziny, aby zobaczyć dostępne sale
+    </div>
+</form>
+
+<h2 class="text-2xl font-semibold mb-4 mt-8">Dostępne sale</h2>
+
+<div id="rooms-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+{% for item in rooms_with_availability %}
+    <div class="room-card card bg-base-100 shadow-xl cursor-pointer hover:shadow-2xl transition-all" 
+         data-room-id="{{ item.room.id }}"
+         data-room-name="{{ item.room.name }}">
+        
+        <div class="card-body">
+            <h3 class="card-title text-xl">{{ item.room.name }}</h3>
+            <div class="room-status-badge">
+                <div class="badge badge-success gap-2">Wolna</div>
+            </div>
+        </div>
+    </div>
+{% endfor %}
+
+</div>
+
+<div id="no-rooms-message" class="text-center opacity-60 mt-8" style="display: none;">
+    Brak dostępnych sal w wybranym terminie
+</div>
+
+
+<!-- ============================================ -->
+<!--                PIKADAY INIT                   -->
+<!-- ============================================ -->
+
+<script>
+// Dane rezerwacji dla każdej sali
+const roomReservations = {
+    {% for item in rooms_with_availability %}
+    {{ item.room.id }}: [
+        {% for r in item.reservations %}
+        {
+            date: "{{ r.date|date:'Y-m-d' }}",
+            time_from: "{{ r.time_from|time:'H:i' }}",
+            time_to: "{{ r.time_to|time:'H:i' }}"
+        },
+        {% endfor %}
+    ],
+    {% endfor %}
+};
+
+document.addEventListener("DOMContentLoaded", function () {
+    // Inicjalizacja menedżera rezerwacji
+    new ReservationManager(roomReservations, {
+        dateInputId: 'reservation-datepicker',
+        timeFromId: 'time-from',
+        timeToId: 'time-to',
+        roomInputId: 'selected-room-id',
+        hintId: 'room-selection-hint',
+        noRoomsMessageId: 'no-rooms-message',
+        formId: 'reservation-form'
+    });
+});
+</script>
+
+{% endblock %}
