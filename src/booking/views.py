@@ -1,94 +1,115 @@
-from datetime import datetime
-
 from django.contrib import messages
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied, ValidationError
-from django.shortcuts import get_object_or_404, redirect
 
-from .models import Room, Reservation
-from .services import ReservationService
+from booking.models import Room, Reservation
+from booking.services import ReservationService
 
 
 @login_required
-def create_reservation(request):
+def new_reservation(request):
     if request.method != "POST":
-        return redirect("index")
+        return redirect("/")
 
     room_id = request.POST.get("room")
-    date_value = request.POST.get("date")
-    start_time_value = request.POST.get("start_time")
-    end_time_value = request.POST.get("end_time")
+    date = request.POST.get("date")
+    time_from = request.POST.get("time_from")
+    time_to = request.POST.get("time_to")
 
     room = get_object_or_404(Room, id=room_id)
 
-    date = datetime.strptime(date_value, "%Y-%m-%d").date()
-    start_time = datetime.strptime(start_time_value, "%H:%M").time()
-    end_time = datetime.strptime(end_time_value, "%H:%M").time()
-
     try:
         ReservationService.create_reservation(
+            user=request.user,
             room=room,
             date=date,
-            start_time=start_time,
-            end_time=end_time,
-            user=request.user,
+            time_from=time_from,
+            time_to=time_to
         )
-        messages.success(request, "Reservation created successfully.")
-    except ValidationError as error:
-        messages.error(request, error.message)
+        messages.success(request, "Rezerwacja została utworzona.")
+    except Exception as e:
+        messages.error(request, str(e))
 
-    return redirect("index")
-
-
-def _can_manage_reservation(user, reservation):
-    return user.is_staff or reservation.created_by == user
+    return redirect("/")
 
 
 @login_required
 def edit_reservation(request, reservation_id):
     reservation = get_object_or_404(Reservation, id=reservation_id)
 
-    if not _can_manage_reservation(request.user, reservation):
-        raise PermissionDenied
+    # Użydtkownik może edytować TYLKO własne rezerwacje
+    if reservation.created_by != request.user and not request.user.is_superuser:
+        messages.error(request, "Nie masz uprawnień do edytowania tej rezerwacji.")
+        return redirect("/")
 
-    if request.method != "POST":
-        return redirect("index")
+    # Tylko aktywne rezerwacje można edytować
+    if reservation.status != Reservation.ReservationStatus.ACTIVE:
+        messages.error(request, "Można edytować tylko aktywne rezerwacje.")
+        return redirect("/")
 
-    room_id = request.POST.get("room")
-    date_value = request.POST.get("date")
-    start_time_value = request.POST.get("start_time")
-    end_time_value = request.POST.get("end_time")
+    if request.method == "GET":
+        # Wyświetl formularz edycji
+        rooms = ReservationService.get_available_rooms()
+        hours = ReservationService.generate_time_slots()
+        
+        # Pobierz rezerwacje dla wszystkich sal (wykluczając edytowaną)
+        rooms_with_availability = []
+        for room in rooms:
+            room_reservations = Reservation.objects.filter(
+                room=room,
+                status=Reservation.ReservationStatus.ACTIVE
+            ).exclude(id=reservation_id).values('date', 'time_from', 'time_to')
+            
+            rooms_with_availability.append({
+                'room': room,
+                'reservations': list(room_reservations)
+            })
+        
+        return render(request, "edit_reservation.html", {
+            "reservation": reservation,
+            "rooms_with_availability": rooms_with_availability,
+            "hours": hours,
+        })
+    
+    elif request.method == "POST":
+        # Zapisz zmiany
+        room_id = request.POST.get("room")
+        date = request.POST.get("date")
+        time_from = request.POST.get("time_from")
+        time_to = request.POST.get("time_to")
 
-    room = get_object_or_404(Room, id=room_id)
+        room = get_object_or_404(Room, id=room_id)
 
-    date = datetime.strptime(date_value, "%Y-%m-%d").date()
-    start_time = datetime.strptime(start_time_value, "%H:%M").time()
-    end_time = datetime.strptime(end_time_value, "%H:%M").time()
+        try:
+            # Jeśli zmieniono salę, zaktualizuj ją
+            if reservation.room.id != int(room_id):
+                reservation.room = room
+            
+            ReservationService.modify_reservation(
+                reservation=reservation,
+                date=date,
+                time_from=time_from,
+                time_to=time_to,
+                user=request.user
+            )
+            messages.success(request, "Rezerwacja została zaktualizowana.")
+        except Exception as e:
+            messages.error(request, str(e))
 
-    try:
-        ReservationService.modify_reservation(
-            reservation=reservation,
-            room=room,
-            date=date,
-            start_time=start_time,
-            end_time=end_time,
-            user=request.user,
-        )
-        messages.success(request, "Reservation updated successfully.")
-    except ValidationError as error:
-        messages.error(request, error.message)
-
-    return redirect("index")
+        return redirect("/")
 
 
 @login_required
 def cancel_reservation(request, reservation_id):
     reservation = get_object_or_404(Reservation, id=reservation_id)
 
-    if not _can_manage_reservation(request.user, reservation):
-        raise PermissionDenied
+    # Użytkownik może anulować TYLKO własne rezerwacje
+    if reservation.created_by != request.user and not request.user.is_superuser:
+        messages.error(request, "Nie masz uprawnień do anulowania tej rezerwacji.")
+        return redirect("/")
 
-    ReservationService.cancel_reservation(reservation)
-    messages.success(request, "Reservation cancelled successfully.")
+    reservation.status = Reservation.ReservationStatus.CANCELLED
+    reservation.save()
 
-    return redirect("index")
+    messages.success(request, "Rezerwacja została anulowana.")
+    return redirect("/")

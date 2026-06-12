@@ -1,58 +1,45 @@
+from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, redirect
 
-from booking.models import Reservation
 from booking.services import ReservationService
 
 
 @login_required
 def index(request):
-    rooms = ReservationService.get_available_rooms()
-    user_reservations = ReservationService.get_user_reservations(request.user)
-    time_slots = ReservationService.get_time_slots()
+    # Pobierz sale z rezerwacjami przez serwis
+    rooms_with_availability = ReservationService.get_rooms_with_availability()
 
-    all_reservations = Reservation.objects.filter(
-        status=Reservation.Status.ACTIVE,
-    ).select_related("room")
+    # Rezerwacje użytkownika
+    reservations = ReservationService.get_user_reservations(request.user)
 
-    return render(
-        request,
-        "index.html",
-        {
-            "rooms": rooms,
-            "user_reservations": user_reservations,
-            "time_slots": time_slots,
-            "all_reservations": all_reservations,
-        },
-    )
+    # Generuj listę godzin
+    hours = ReservationService.generate_time_slots()
+
+    return render(request, "index.html", {
+        "rooms_with_availability": rooms_with_availability,
+        "reservations": reservations,
+        "hours": hours,
+    })
+
 
 
 def login_view(request):
-    if request.user.is_authenticated:
-        return redirect("index")
-
-    error = None
-
     if request.method == "POST":
         username = request.POST.get("username")
         password = request.POST.get("password")
 
-        user = authenticate(
-            request,
-            username=username,
-            password=password,
-        )
+        user = authenticate(request, username=username, password=password)
 
         if user is not None:
             login(request, user)
-            return redirect("index")
+            return redirect("/")
+        else:
+            return render(request, "login.html", {"invalid": True})
 
-        error = "Invalid username or password."
-
-    return render(request, "login.html", {"error": error})
+    return render(request, "login.html")
 
 
 def logout_view(request):
     logout(request)
-    return redirect("login")
+    return redirect("/")

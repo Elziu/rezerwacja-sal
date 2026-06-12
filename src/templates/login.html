@@ -1,30 +1,56 @@
-<!DOCTYPE html>
-<html lang="pl">
-<head>
-    <meta charset="UTF-8">
-    <title>Logowanie</title>
-</head>
-<body>
-    <h1>Logowanie</h1>
+{% extends "base.html" %}
+{% block content %}
 
-    {% if error %}
-        <p style="color: red;">{{ error }}</p>
-    {% endif %}
+<div class="flex justify-center pt-20 px-4">
+    <div class="card bg-base-300 shadow-2xl w-full max-w-md">
 
-    <form method="post">
-        {% csrf_token %}
+        <div class="card-body space-y-4">
+            <h2 class="text-3xl font-semibold text-center">Zaloguj się do systemu</h2>
 
-        <div>
-            <label for="username">Login</label>
-            <input id="username" type="text" name="username" required>
+            {% if invalid %}
+                <div class="alert alert-error shadow-lg">
+                    <span>Niepoprawna nazwa użytkownika lub hasło.</span>
+                </div>
+            {% endif %}
+
+            <form method="POST" class="space-y-4">
+                {% csrf_token %}
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Nazwa użytkownika</span>
+                    </label>
+                    <input
+                        type="text"
+                        name="username"
+                        class="input input-bordered w-full"
+                        placeholder="np. jan.kowalski"
+                        required
+                    >
+                </div>
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Hasło</span>
+                    </label>
+                    <input
+                        type="password"
+                        name="password"
+                        class="input input-bordered w-full"
+                        placeholder="••••••••"
+                        required
+                    >
+                </div>
+
+                <div class="pt-2">
+                    <button class="btn btn-primary w-full text-lg">
+                        Zaloguj się
+                    </button>
+                </div>
+            </form>
         </div>
 
-        <div>
-            <label for="password">Hasło</label>
-            <input id="password" type="password" name="password" required>
-        </div>
+    </div>
+</div>
 
-        <button type="submit">Zaloguj</button>
-    </form>
-</body>
-</html>
+{% endblock %}
