@@ -1,5 +1,10 @@
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from booking.models import Room, Reservation
+from django.utils import timezone
+
+from booking.models import Room, Reservation, ReservationParticipant
+
+User = get_user_model()
 
 
 class ReservationService:
@@ -39,7 +44,7 @@ class ReservationService:
         return ReservationService._check_time_conflict(room, date, time_from, time_to)
 
     @staticmethod
-    def create_reservation(user, room, date, time_from, time_to):
+    def create_reservation(user, room, date, time_from, time_to, participant_ids=None):
         """Tworzy nową rezerwację z pełną walidacją."""
         # 1. Walidacja przedziału czasowego
         ReservationService._validate_time_range(time_from, time_to)
@@ -52,13 +57,19 @@ class ReservationService:
             raise ValidationError("Sala jest zajęta w wybranym przedziale czasu.")
 
         # 4. Utworzenie rezerwacji
-        return Reservation.objects.create(
+        reservation = Reservation.objects.create(
             room=room,
             date=date,
             time_from=time_from,
             time_to=time_to,
             created_by=user
         )
+        ReservationService.update_reservation_participants(
+            reservation=reservation,
+            participant_ids=participant_ids,
+            organizer=user,
+        )
+        return reservation
 
     @staticmethod
     def modify_reservation(reservation, date, time_from, time_to, user):
@@ -93,9 +104,60 @@ class ReservationService:
         return reservation
 
     @staticmethod
+    def get_selectable_participants(current_user):
+        """Pobiera użytkowników, których można dodać jako uczestników."""
+        return User.objects.exclude(id=current_user.id).order_by("username")
+
+    @staticmethod
+    def update_reservation_participants(reservation, participant_ids, organizer):
+        """Aktualizuje listę uczestników rezerwacji."""
+        participant_ids = participant_ids or []
+        selected_ids = {
+            int(participant_id)
+            for participant_id in participant_ids
+            if str(participant_id).isdigit()
+        }
+        selected_ids.discard(organizer.id)
+
+        selected_users = User.objects.filter(id__in=selected_ids)
+        participants = ReservationParticipant.objects.filter(reservation=reservation)
+
+        participants.exclude(user__in=selected_users).delete()
+
+        for user in selected_users:
+            ReservationParticipant.objects.get_or_create(
+                reservation=reservation,
+                user=user,
+            )
+
+    @staticmethod
+    def get_user_invitations(user):
+        """Pobiera zaproszenia użytkownika do aktywnych rezerwacji."""
+        return (
+            ReservationParticipant.objects.select_related(
+                "reservation",
+                "reservation__room",
+                "reservation__created_by",
+            )
+            .filter(
+                user=user,
+                reservation__status=Reservation.ReservationStatus.ACTIVE,
+            )
+            .order_by("reservation__date", "reservation__time_from")
+        )
+
+    @staticmethod
+    def respond_to_invitation(participant, status):
+        """Zapisuje odpowiedź uczestnika."""
+        participant.status = status
+        participant.responded_at = timezone.now()
+        participant.save(update_fields=["status", "responded_at"])
+        return participant
+
+    @staticmethod
     def get_user_reservations(user, include_cancelled=False):
         """Pobiera rezerwacje użytkownika."""
-        query = Reservation.objects.filter(created_by=user)
+        query = Reservation.objects.filter(created_by=user).prefetch_related("participants__user")
         
         if not include_cancelled:
             query = query.filter(status=Reservation.ReservationStatus.ACTIVE)

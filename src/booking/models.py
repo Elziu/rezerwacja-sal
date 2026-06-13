@@ -36,3 +36,39 @@ class Reservation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+
+class ReservationParticipant(models.Model):
+    class PresenceStatus(models.TextChoices):
+        PENDING = "PENDING", "Oczekuje"
+        CONFIRMED = "CONFIRMED", "Potwierdzona"
+        DECLINED = "DECLINED", "Odmówiona"
+
+    reservation = models.ForeignKey(
+        Reservation,
+        on_delete=models.CASCADE,
+        related_name="participants",
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="reservation_invitations",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=PresenceStatus.choices,
+        default=PresenceStatus.PENDING,
+    )
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reservation", "user"],
+                name="unique_reservation_participant",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.reservation} ({self.status})"
+

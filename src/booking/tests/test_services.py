@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from datetime import date, time
-from booking.models import Room, Reservation
+from booking.models import Room, Reservation, ReservationParticipant
 from booking.services import ReservationService
 
 User = get_user_model()
@@ -28,6 +28,24 @@ class TestReservationService:
         assert reservation.room == room
         assert reservation.created_by == user
         assert reservation.status == Reservation.ReservationStatus.ACTIVE
+
+    def test_create_reservation_with_participants(self, user, room):
+        participant = User.objects.create_user(username="participant", password="password")
+
+        reservation = ReservationService.create_reservation(
+            user=user,
+            room=room,
+            date=date(2026, 1, 30),
+            time_from=time(10, 0),
+            time_to=time(12, 0),
+            participant_ids=[participant.id, user.id, "wrong"],
+        )
+
+        invitations = ReservationParticipant.objects.filter(reservation=reservation)
+
+        assert invitations.count() == 1
+        assert invitations.get().user == participant
+        assert invitations.get().status == ReservationParticipant.PresenceStatus.PENDING
 
     def test_create_reservation_invalid_time_range(self, user, room):
         r_date = date(2026, 1, 30)
@@ -77,6 +95,75 @@ class TestReservationService:
 
         reservation.refresh_from_db()
         assert reservation.status == Reservation.ReservationStatus.CANCELLED
+
+    def test_update_reservation_participants(self, user, room):
+        participant_1 = User.objects.create_user(username="participant1", password="password")
+        participant_2 = User.objects.create_user(username="participant2", password="password")
+        reservation = ReservationService.create_reservation(
+            user,
+            room,
+            date(2026, 1, 30),
+            time(10, 0),
+            time(12, 0),
+            participant_ids=[participant_1.id],
+        )
+        invitation = ReservationParticipant.objects.get(
+            reservation=reservation,
+            user=participant_1,
+        )
+        invitation.status = ReservationParticipant.PresenceStatus.CONFIRMED
+        invitation.save()
+
+        ReservationService.update_reservation_participants(
+            reservation=reservation,
+            participant_ids=[participant_1.id, participant_2.id],
+            organizer=user,
+        )
+
+        invitation.refresh_from_db()
+        assert invitation.status == ReservationParticipant.PresenceStatus.CONFIRMED
+        assert ReservationParticipant.objects.filter(
+            reservation=reservation,
+            user=participant_2,
+        ).exists()
+
+        ReservationService.update_reservation_participants(
+            reservation=reservation,
+            participant_ids=[participant_2.id],
+            organizer=user,
+        )
+
+        assert not ReservationParticipant.objects.filter(
+            reservation=reservation,
+            user=participant_1,
+        ).exists()
+
+    def test_respond_to_invitation(self, user, room):
+        participant_user = User.objects.create_user(
+            username="participant",
+            password="password",
+        )
+        reservation = ReservationService.create_reservation(
+            user,
+            room,
+            date(2026, 1, 30),
+            time(10, 0),
+            time(12, 0),
+            participant_ids=[participant_user.id],
+        )
+        invitation = ReservationParticipant.objects.get(
+            reservation=reservation,
+            user=participant_user,
+        )
+
+        ReservationService.respond_to_invitation(
+            invitation,
+            ReservationParticipant.PresenceStatus.CONFIRMED,
+        )
+
+        invitation.refresh_from_db()
+        assert invitation.status == ReservationParticipant.PresenceStatus.CONFIRMED
+        assert invitation.responded_at is not None
 
     def test_get_available_rooms(self, user, room):
         # Create another room
