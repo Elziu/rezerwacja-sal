@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h2 class="text-2xl font-semibold mb-4">Twoje rezerwacje</h2>
+<div class="flex justify-between items-center mb-4">
+    <h2 class="text-2xl font-semibold">Twoje rezerwacje</h2>
+    {% if reservations %}
+    <a href="{% url 'export_my_reservations' %}" class="btn btn-sm btn-outline">
+        📥 Eksportuj do kalendarza
+    </a>
+    {% endif %}
+</div>
 
 {% if reservations %}
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
@@ -29,6 +36,9 @@
                 </a>
                 <a href="/reservations/{{ r.id }}/cancel/" class="btn btn-sm btn-error">
                     Anuluj
+                </a>
+                <a href="{% url 'export_reservation' r.id %}" class="btn btn-sm btn-ghost" title="Pobierz jako .ics">
+                    📥
                 </a>
                 {% endif %}
             </div>
