@@ -3,8 +3,9 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 from django.contrib.admin.views.decorators import staff_member_required
+from django.views.decorators.http import require_POST
 
-from booking.models import Room, Reservation
+from booking.models import Room, Reservation, ReservationParticipant
 from booking.services import ReservationService
 from booking.calendar_export import CalendarExporter
 
@@ -18,6 +19,7 @@ def new_reservation(request):
     date = request.POST.get("date")
     time_from = request.POST.get("time_from")
     time_to = request.POST.get("time_to")
+    participant_ids = request.POST.getlist("participants")
 
     room = get_object_or_404(Room, id=room_id)
 
@@ -28,6 +30,7 @@ def new_reservation(request):
             date=date,
             time_from=time_from,
             time_to=time_to,
+            participant_ids=participant_ids,
         )
         messages.success(request, "Rezerwacja została utworzona.")
     except Exception as e:
@@ -54,6 +57,12 @@ def edit_reservation(request, reservation_id):
         # Wyświetl formularz edycji
         rooms = ReservationService.get_available_rooms()
         hours = ReservationService.generate_time_slots()
+        participant_options = ReservationService.get_selectable_participants(
+            reservation.created_by
+        )
+        selected_participant_ids = list(
+            reservation.participants.values_list("user_id", flat=True)
+        )
 
         # Pobierz rezerwacje dla wszystkich sal (wykluczając edytowaną)
         rooms_with_availability = []
@@ -77,6 +86,8 @@ def edit_reservation(request, reservation_id):
                 "reservation": reservation,
                 "rooms_with_availability": rooms_with_availability,
                 "hours": hours,
+                "participant_options": participant_options,
+                "selected_participant_ids": selected_participant_ids,
             },
         )
 
@@ -86,6 +97,7 @@ def edit_reservation(request, reservation_id):
         date = request.POST.get("date")
         time_from = request.POST.get("time_from")
         time_to = request.POST.get("time_to")
+        participant_ids = request.POST.getlist("participants")
 
         room = get_object_or_404(Room, id=room_id)
 
@@ -100,6 +112,11 @@ def edit_reservation(request, reservation_id):
                 time_from=time_from,
                 time_to=time_to,
                 user=request.user,
+            )
+            ReservationService.update_reservation_participants(
+                reservation=reservation,
+                participant_ids=participant_ids,
+                organizer=reservation.created_by,
             )
             messages.success(request, "Rezerwacja została zaktualizowana.")
         except Exception as e:
@@ -121,6 +138,42 @@ def cancel_reservation(request, reservation_id):
     reservation.save()
 
     messages.success(request, "Rezerwacja została anulowana.")
+    return redirect("/")
+
+
+@login_required
+@require_POST
+def confirm_presence(request, participant_id):
+    participant = get_object_or_404(
+        ReservationParticipant,
+        id=participant_id,
+        user=request.user,
+        reservation__status=Reservation.ReservationStatus.ACTIVE,
+    )
+
+    ReservationService.respond_to_invitation(
+        participant,
+        ReservationParticipant.PresenceStatus.CONFIRMED,
+    )
+    messages.success(request, "Obecność została potwierdzona.")
+    return redirect("/")
+
+
+@login_required
+@require_POST
+def decline_presence(request, participant_id):
+    participant = get_object_or_404(
+        ReservationParticipant,
+        id=participant_id,
+        user=request.user,
+        reservation__status=Reservation.ReservationStatus.ACTIVE,
+    )
+
+    ReservationService.respond_to_invitation(
+        participant,
+        ReservationParticipant.PresenceStatus.DECLINED,
+    )
+    messages.success(request, "Odmowa obecności została zapisana.")
     return redirect("/")
 
 

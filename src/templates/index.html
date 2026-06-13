@@ -29,6 +29,26 @@
                 <span class="badge badge-error">Anulowana</span>
             {% endif %}
 
+            {% if r.participants.all %}
+            <div class="mt-4">
+                <p class="font-semibold mb-2">Uczestnicy</p>
+                <div class="space-y-2">
+                    {% for participant in r.participants.all %}
+                    <div class="flex items-center justify-between gap-3 text-sm">
+                        <span>{{ participant.user.username }}</span>
+                        {% if participant.status == "CONFIRMED" %}
+                            <span class="badge badge-success badge-sm">{{ participant.get_status_display }}</span>
+                        {% elif participant.status == "DECLINED" %}
+                            <span class="badge badge-error badge-sm">{{ participant.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-warning badge-sm">{{ participant.get_status_display }}</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <div class="card-actions justify-end mt-4">
                 {% if r.status == "ACTIVE" %}
                 <a href="/reservations/{{ r.id }}/edit/" class="btn btn-sm btn-primary">
@@ -51,6 +71,50 @@
 {% else %}
 <div class="text-center opacity-60 mb-12">
     Brak rezerwacji.
+</div>
+{% endif %}
+
+{% if invitations %}
+<h2 class="text-2xl font-semibold mb-4">Zaproszenia do rezerwacji</h2>
+
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+    {% for invitation in invitations %}
+    <div class="card bg-base-100 shadow-xl">
+        <div class="card-body">
+            <h3 class="card-title text-xl">{{ invitation.reservation.room.name }}</h3>
+
+            <p class="opacity-80">
+                {{ invitation.reservation.date }}<br>
+                {{ invitation.reservation.time_from|time:"H:i" }} – {{ invitation.reservation.time_to|time:"H:i" }}<br>
+                Organizator: {{ invitation.reservation.created_by.username }}
+            </p>
+
+            {% if invitation.status == "CONFIRMED" %}
+                <span class="badge badge-success">{{ invitation.get_status_display }}</span>
+            {% elif invitation.status == "DECLINED" %}
+                <span class="badge badge-error">{{ invitation.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-warning">{{ invitation.get_status_display }}</span>
+            {% endif %}
+
+            <div class="card-actions justify-end mt-4">
+                {% if invitation.status != "CONFIRMED" %}
+                <form method="POST" action="{% url 'confirm_presence' invitation.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success">Potwierdź</button>
+                </form>
+                {% endif %}
+
+                {% if invitation.status != "DECLINED" %}
+                <form method="POST" action="{% url 'decline_presence' invitation.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-error">Odmów</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
 </div>
 {% endif %}
 
@@ -106,6 +170,25 @@
         </div>
 
     </div>
+
+    {% if participant_options %}
+    <div class="mt-6">
+        <p class="font-semibold mb-3">Uczestnicy</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for participant in participant_options %}
+            <label class="label cursor-pointer justify-start gap-3 rounded-lg bg-base-100 px-3 py-2">
+                <input
+                    type="checkbox"
+                    name="participants"
+                    value="{{ participant.id }}"
+                    class="checkbox checkbox-primary checkbox-sm"
+                >
+                <span class="label-text">{{ participant.username }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
     
     <div id="room-selection-hint" class="mt-4 text-center opacity-60">
         Wybierz datę i godziny, aby zobaczyć dostępne sale

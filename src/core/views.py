@@ -16,10 +16,16 @@ def index(request):
     # Generuj listę godzin
     hours = ReservationService.generate_time_slots()
 
+    # Uczestnicy i zaproszenia
+    participant_options = ReservationService.get_selectable_participants(request.user)
+    invitations = ReservationService.get_user_invitations(request.user)
+
     return render(request, "index.html", {
         "rooms_with_availability": rooms_with_availability,
         "reservations": reservations,
         "hours": hours,
+        "participant_options": participant_options,
+        "invitations": invitations,
     })
 
 
